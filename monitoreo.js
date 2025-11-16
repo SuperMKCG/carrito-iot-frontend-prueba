@@ -100,23 +100,17 @@ async function cargarUltimos10Movimientos(){
 
 
 // --------- Último Obstáculo ----------
+// --------- Último Obstáculo ----------
 async function cargarUltimoObstaculo(){
   try{
-    const res = await fetch(`${API_URL}/obstaculo/ultimo/${DISPOSITIVO_ID}`);
-    const json = await res.json();
-    const r = pickFirst(json) || {};
+    const json = await (await fetch(`${API_URL}/obstaculo/ultimo/${DISPOSITIVO_ID}`)).json();
+    const r = Array.isArray(json) ? json[0] : json; // tomar primer elemento si viene en array
 
-    const id    = r.id_evento_obstaculo ?? r.ID_EVENTO_OBSTACULO ?? '-';
-    const obsId = r.id_obstaculo        ?? r.ID_OBSTACULO        ?? '-';
-    const desc  = r.descripcion         ?? r.DESCRIPCION         ?? '-';
-    const modo  = r.modo                ?? r.MODO                ?? '-';
-    const fecha = r.creado_en           ?? r.CREADO_EN           ?? r.fecha ?? '-';
-
-    setText('uo-id', id);
-    setText('uo-obs-id', obsId);
-    setText('uo-desc', desc);
-    setText('uo-modo', modo);
-    setText('uo-fecha', fmtDate(fecha));
+    setText('uo-id',     r?.id_evento_obstaculo ?? '-');
+    setText('uo-obs-id', r?.id_obstaculo ?? '-');
+    setText('uo-desc',   r?.descripcion ?? '-');
+    setText('uo-modo',   r?.modo ?? '-');
+    setText('uo-fecha',  fmtDate(r?.creado_en));
   }catch(_){
     ['uo-id','uo-obs-id','uo-desc','uo-modo','uo-fecha'].forEach(id => setText(id,'-'));
   }
@@ -233,12 +227,6 @@ async function init(){
     cargarUltimos10Obstaculos(),
     cargarUltimas20Secuencias()
   ]);
-  // Refrescos periódicos suaves (por si se pierde WS)
-  setInterval(cargarUltimoMovimiento,     8000);
-  setInterval(cargarUltimos10Movimientos, 15000);
-  setInterval(cargarUltimoObstaculo,      10000);
-  setInterval(cargarUltimos10Obstaculos,  18000);
-  setInterval(cargarUltimas20Secuencias,  20000);
 }
 
 document.addEventListener('DOMContentLoaded', init);
