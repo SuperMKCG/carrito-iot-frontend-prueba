@@ -23,7 +23,9 @@ const OPS = {
 // Helpers
 function fmtDate(v){
   if(!v) return '-';
-  try{ return new Date(v).toLocaleString(); }catch(_){ return v; }
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleString();
 }
 
 function el(id){ return document.getElementById(id); }
@@ -85,6 +87,7 @@ async function cargarUltimos10Movimientos(){
   }
 }
 
+
 // --------- Último Obstáculo ----------
 async function cargarUltimoObstaculo(){
   try{
@@ -95,17 +98,15 @@ async function cargarUltimoObstaculo(){
     const obsId  = r?.id_obstaculo ?? r?.ID_OBSTACULO ?? '-';
     const desc   = r?.descripcion ?? r?.DESCRIPCION ?? '-';
     const modo   = r?.modo ?? r?.MODO ?? '-';
-    const sec    = r?.id_secuencia_evasion ?? r?.ID_SECUENCIA_EVASION ?? '-';
-    const fecha  = r?.creado_en ?? r?.CREADO_EN ?? '-';
+    const fecha  = r?.creado_en ?? r?.CREADO_EN ?? r?.fecha ?? '-';
 
     setText('uo-id', id);
     setText('uo-obs-id', obsId);
     setText('uo-desc', desc);
     setText('uo-modo', modo);
-    setText('uo-sec', sec);
     setText('uo-fecha', fmtDate(fecha));
   }catch(_){
-    ['uo-id','uo-obs-id','uo-desc','uo-modo','uo-sec','uo-fecha'].forEach(id => setText(id,'-'));
+    ['uo-id','uo-obs-id','uo-desc','uo-modo','uo-fecha'].forEach(id => setText(id,'-'));
   }
 }
 
@@ -123,8 +124,7 @@ async function cargarUltimos10Obstaculos(){
       const obsId  = r?.id_obstaculo ?? r?.ID_OBSTACULO ?? '-';
       const desc   = r?.descripcion ?? r?.DESCRIPCION ?? '-';
       const modo   = r?.modo ?? r?.MODO ?? '-';
-      const sec    = r?.id_secuencia_evasion ?? r?.ID_SECUENCIA_EVASION ?? '-';
-      const fecha  = r?.creado_en ?? r?.CREADO_EN ?? '-';
+      const fecha  = r?.creado_en ?? r?.CREADO_EN ?? r?.fecha ?? '-';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -132,18 +132,17 @@ async function cargarUltimos10Obstaculos(){
         <td>${obsId}</td>
         <td>${desc}</td>
         <td>${modo}</td>
-        <td>${sec}</td>
         <td>${fmtDate(fecha)}</td>
       `;
       tb.appendChild(tr);
     });
 
     if(tb.children.length === 0){
-      tb.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Sin datos</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Sin datos</td></tr>`;
     }
   }catch(_){
     const tb = el('tabla-obstaculos');
-    if(tb) tb.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error al cargar</td></tr>`;
+    if(tb) tb.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error al cargar</td></tr>`;
   }
 }
 
