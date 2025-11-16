@@ -23,9 +23,20 @@ const OPS = {
 // Helpers
 function fmtDate(v){
   if(!v) return '-';
+  // Normaliza formatos comunes y evita "Invalid Date"
   const d = new Date(v);
-  if (isNaN(d.getTime())) return '-';
-  return d.toLocaleString();
+  return isNaN(d.getTime()) ? '-' : d.toLocaleString();
+}
+
+// Obtiene el primer registro sin importar si viene como array, objeto o envuelto en {data:[]}
+function pickFirst(rec){
+  if (!rec) return null;
+  if (Array.isArray(rec)) return rec[0] || null;
+  if (rec.data){
+    if (Array.isArray(rec.data)) return rec.data[0] || null;
+    return rec.data; // por si viene como {data:{...}}
+  }
+  return rec;
 }
 
 function el(id){ return document.getElementById(id); }
@@ -92,13 +103,14 @@ async function cargarUltimos10Movimientos(){
 async function cargarUltimoObstaculo(){
   try{
     const res = await fetch(`${API_URL}/obstaculo/ultimo/${DISPOSITIVO_ID}`);
-    const r = await res.json();
+    const json = await res.json();
+    const r = pickFirst(json) || {};
 
-    const id     = r?.id_evento_obstaculo ?? r?.ID_EVENTO_OBSTACULO ?? '-';
-    const obsId  = r?.id_obstaculo ?? r?.ID_OBSTACULO ?? '-';
-    const desc   = r?.descripcion ?? r?.DESCRIPCION ?? '-';
-    const modo   = r?.modo ?? r?.MODO ?? '-';
-    const fecha  = r?.creado_en ?? r?.CREADO_EN ?? r?.fecha ?? '-';
+    const id    = r.id_evento_obstaculo ?? r.ID_EVENTO_OBSTACULO ?? '-';
+    const obsId = r.id_obstaculo        ?? r.ID_OBSTACULO        ?? '-';
+    const desc  = r.descripcion         ?? r.DESCRIPCION         ?? '-';
+    const modo  = r.modo                ?? r.MODO                ?? '-';
+    const fecha = r.creado_en           ?? r.CREADO_EN           ?? r.fecha ?? '-';
 
     setText('uo-id', id);
     setText('uo-obs-id', obsId);
@@ -116,15 +128,16 @@ async function cargarUltimos10Obstaculos(){
     const tb = el('tabla-obstaculos');
     if(!tb) return;
     const res = await fetch(`${API_URL}/obstaculo/ultimos10/${DISPOSITIVO_ID}`);
-    const data = await res.json();
+    const json = await res.json();
+    const data = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
 
     tb.innerHTML = '';
-    (data || []).forEach(r => {
-      const id     = r?.id_evento_obstaculo ?? r?.ID_EVENTO_OBSTACULO ?? '-';
-      const obsId  = r?.id_obstaculo ?? r?.ID_OBSTACULO ?? '-';
-      const desc   = r?.descripcion ?? r?.DESCRIPCION ?? '-';
-      const modo   = r?.modo ?? r?.MODO ?? '-';
-      const fecha  = r?.creado_en ?? r?.CREADO_EN ?? r?.fecha ?? '-';
+    data.forEach(r => {
+      const id    = r.id_evento_obstaculo ?? r.ID_EVENTO_OBSTACULO ?? '-';
+      const obsId = r.id_obstaculo        ?? r.ID_OBSTACULO        ?? '-';
+      const desc  = r.descripcion         ?? r.DESCRIPCION         ?? '-';
+      const modo  = r.modo                ?? r.MODO                ?? '-';
+      const fecha = r.creado_en           ?? r.CREADO_EN           ?? r.fecha ?? '-';
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
