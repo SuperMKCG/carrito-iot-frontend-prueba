@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Control - Carrito IoT</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header py-2 sticky-top">
+    <div class="container-fluid">
+      <div class="d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">🎮 Control del Carrito</h4>
+        <div class="d-flex gap-2">
+          <a href="monitoreo.html" class="btn btn-sm btn-outline-light">📊 Monitoreo</a>
+          <a href="index.html" class="btn btn-sm btn-outline-light">🏠 Inicio</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="container-fluid py-3">
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="status-panel status-panel-compact">
+          <div class="row g-2">
+            <div class="col-md-3">
+              <div class="status-label">Movimiento</div>
+              <div class="status-value" id="status-movimiento">En espera...</div>
+            </div>
+            <div class="col-md-3">
+              <div class="status-label">Obstáculo Detectado</div>
+              <div class="status-value" id="status-obstaculo">Ninguno</div>
+            </div>
+            <div class="col-md-3">
+              <div class="status-label">Secuencia</div>
+              <div class="status-value" id="status-secuencia">Ninguna</div>
+            </div>
+            <div class="col-md-3">
+              <div class="status-label">Evasión</div>
+              <div class="status-value" id="status-evasion">Ninguna</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="app-card p-3">
+          <h5 class="mb-3 text-center">Controles de Movimiento</h5>
+          <div class="d-flex flex-column align-items-center gap-2">
+            <div class="d-flex gap-2 justify-content-center">
+              <button class="control-btn control-btn-compact btn-turn" data-op="5">Vuelta adelante izq.</button>
+              <button class="control-btn control-btn-compact btn-forward" data-op="1">Adelante</button>
+              <button class="control-btn control-btn-compact btn-turn" data-op="4">Vuelta adelante der.</button>
+            </div>
+            <div class="d-flex gap-2 justify-content-center flex-wrap">
+              <button class="control-btn control-btn-compact btn-rotate-360" data-op="11">360° izq.</button>
+              <button class="control-btn control-btn-compact btn-rotate-90" data-op="9">90° izq.</button>
+              <button class="control-btn control-btn-compact btn-stop" data-op="3">Detener</button>
+              <button class="control-btn control-btn-compact btn-rotate-90" data-op="8">90° der.</button>
+              <button class="control-btn control-btn-compact btn-rotate-360" data-op="10">360° der.</button>
+            </div>
+            <div class="d-flex gap-2 justify-content-center">
+              <button class="control-btn control-btn-compact btn-turn" data-op="7">Vuelta atrás izq.</button>
+              <button class="control-btn control-btn-compact btn-backward" data-op="2">Atrás</button>
+              <button class="control-btn control-btn-compact btn-turn" data-op="6">Vuelta atrás der.</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-lg-6 mb-3">
+        <div class="app-card p-3 compact-section">
+          <h5>📹 Grabación y Ejecución</h5>
+          <div class="mb-2">
+            <input type="text" id="nombre-secuencia" class="form-control" placeholder="Nombre de la secuencia" />
+          </div>
+          <div class="d-flex flex-column gap-1">
+            <button id="btn-grabar" class="btn btn-danger w-100">🔴 Grabar</button>
+            <button id="btn-guardar" class="btn btn-success w-100" disabled>💾 Guardar</button>
+            <button id="btn-ejecutar-grabada" class="btn btn-primary w-100" disabled>▶️ Ejecutar</button>
+          </div>
+          <div id="recording-info" class="mt-2 text-center" style="display: none;">
+            <span class="badge badge-recording">GRABANDO... (<span id="paso-count">0</span> pasos)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-6 mb-3">
+        <div class="app-card p-3 compact-section">
+          <h5>🔁 Repetir Secuencia</h5>
+          <div class="mb-2">
+            <select id="select-secuencia" class="form-select">
+              <option value="">Seleccionar secuencia...</option>
+            </select>
+          </div>
+          <button id="btn-repetir" class="btn btn-primary w-100">▶️ Repetir Secuencia</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECCIÓN: Velocidades (compacta y vistosa) -->
+    <div class="row mb-3">
+      <div class="col-12 d-flex justify-content-center">
+        <div class="app-card p-3 compact-section speed-card">
+          <h6 class="mb-2 text-center">⚡ Velocidad</h6>
+          <div class="d-flex flex-wrap justify-content-center speed-group" id="speed-group">
+            <button type="button" class="btn btn-neon speed-chip me-2 mb-2" id="btn-speed-150" data-speed="150">Lento</button>
+            <button type="button" class="btn btn-neon speed-chip me-2 mb-2" id="btn-speed-190" data-speed="190">Medio</button>
+            <button type="button" class="btn btn-neon speed-chip mb-2"    id="btn-speed-220" data-speed="220">Alto</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- FIN SECCIÓN Velocidades -->
+
+  </div>
+
+  <div id="overlay-grabacion" class="recording-overlay" style="display: none;">
+    <div class="recording-panel">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0">🔴 GRABANDO SECUENCIA</h6>
+        <span class="badge bg-danger" id="overlay-count">0 pasos</span>
+      </div>
+      <div class="recording-list" id="overlay-movimientos">
+        <p class="text-muted small mb-0">Presiona botones para grabar...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="control.js"></script>
+</body>
+</html>
