@@ -183,14 +183,17 @@ document.querySelectorAll('.control-btn').forEach(btn => {
     btn.style.transform = 'scale(0.97)';
   });
 
-  const reset = () => {
-    if(!pressed) return;
-    pressed = false;
-    enviarMovimiento(3); // detener
+const reset = () => {
+  if(!pressed) return;
+  pressed = false;
+  // NO mandes detener si estamos grabando (evita “Detener” como paso extra)
+  if (!isRecording) {
+    enviarMovimiento(3); // detener solo en modo manual real
     setEstadoMovimiento('Detenido');
-    btn.style.opacity = '1';
-    btn.style.transform = 'scale(1)';
-  };
+  }
+  btn.style.opacity = '1';
+  btn.style.transform = 'scale(1)';
+};
 
   btn.addEventListener('mouseup', reset);
   btn.addEventListener('mouseleave', reset);
