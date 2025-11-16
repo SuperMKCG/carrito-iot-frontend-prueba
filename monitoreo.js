@@ -23,7 +23,6 @@ const OPS = {
 // Helpers
 function fmtDate(v){
   if(!v) return '-';
-  // Normaliza formatos comunes y evita "Invalid Date"
   const d = new Date(v);
   return isNaN(d.getTime()) ? '-' : d.toLocaleString();
 }
@@ -98,13 +97,11 @@ async function cargarUltimos10Movimientos(){
   }
 }
 
-
-// --------- Último Obstáculo ----------
 // --------- Último Obstáculo ----------
 async function cargarUltimoObstaculo(){
   try{
     const json = await (await fetch(`${API_URL}/obstaculo/ultimo/${DISPOSITIVO_ID}`)).json();
-    const r = Array.isArray(json) ? json[0] : json; // tomar primer elemento si viene en array
+    const r = Array.isArray(json) ? json[0] : json;
 
     setText('uo-id',     r?.id_evento_obstaculo ?? '-');
     setText('uo-obs-id', r?.id_obstaculo ?? '-');
