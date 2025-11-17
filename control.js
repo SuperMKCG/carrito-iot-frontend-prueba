@@ -18,19 +18,6 @@ let selectedSpeed = SPEED.lento;
 // Solo Adelante (1) y Atrás (2) son continuos
 const MOVIMIENTOS_UNICOS = [3, 4, 5, 6, 7, 8, 9, 10, 11]; // 3: Detener, 4-7: Vueltas, 8-11: Giros
 
-// Duraciones en milisegundos para movimientos únicos (del programa del carrito)
-const DURACIONES_MS = {
-  3: 500,   // Detener
-  4: 1200,  // Vuelta adelante derecha
-  5: 1200,  // Vuelta adelante izquierda
-  6: 1200,  // Vuelta atrás derecha
-  7: 1200,  // Vuelta atrás izquierda
-  8: 800,   // Giro 90° derecha
-  9: 800,   // Giro 90° izquierda
-  10: 1100, // Giro 360° derecha
-  11: 1100  // Giro 360° izquierda
-};
-
 // ----------------- Estado UI -----------------
 const statusMovimiento = document.getElementById('status-movimiento');
 const statusObstaculo  = document.getElementById('status-obstaculo');
@@ -61,23 +48,12 @@ let recordedSequence    = [];     // [{operacion, velocidad}]
 let ejecutandoSecuencia = false;
 let idSecuenciaGrabada  = null;   // ID de la secuencia recién guardada
 
-// Flags para prevenir ejecuciones múltiples de movimientos únicos
-let movimientoUnicoEnProgreso = false;
-
 const operaciones = {
   1:'Adelante',2:'Atrás',3:'Detener',
   4:'Vuelta adelante derecha',5:'Vuelta adelante izquierda',
   6:'Vuelta atrás derecha',7:'Vuelta atrás izquierda',
   8:'Giro 90° derecha',9:'Giro 90° izquierda',
   10:'Giro 360° derecha',11:'Giro 360° izquierda'
-};
-
-const obstaculos = {
-  1: 'Adelante',
-  2: 'Adelante-Izquierda',
-  3: 'Adelante-Derecha',
-  4: 'Adelante-Izquierda-Derecha',
-  5: 'Retrocede'
 };
 
 // ----------------- Utilidades -----------------
@@ -131,19 +107,12 @@ function connectWebSocket(){
       if(ev === 'secuencia_iniciada'){
         setEstadoSecuencia(`Secuencia iniciada (ejec #${d.id_ejecucion ?? '-'})`);
       } else if(ev === 'comando_carrito'){
-        const opId = d.operacion ?? d.operacion_id;
-        const opNombre = d.operacion_nombre || operaciones[opId] || `Operación ${opId}`;
-        setEstadoMovimiento(`Paso: ${opNombre} | Vel: ${d.velocidad ?? '-'}`);
+        setEstadoMovimiento(`Paso: ${operaciones[d.operacion] || d.operacion} | Vel: ${d.velocidad ?? '-'}`);
       } else if(ev === 'secuencia_finalizada'){
         setEstadoSecuencia(`Secuencia finalizada (ejec #${d.id_ejecucion ?? '-'})`);
         ejecutandoSecuencia = false;
       } else if(ev === 'obstaculo_detectado'){
-        const obsId = d.obstaculo ?? d.id_obstaculo ?? d.obstaculo_id;
-        const obsNombre = d.obstaculo_nombre || obstaculos[obsId] || `Obstáculo ${obsId}`;
-        setEstadoObstaculo(`⚠️ Obstáculo: ${obsNombre}`);
-      } else if(ev === 'movimiento_completado'){
-        // Cuando un movimiento único se completa, permitir el siguiente
-        movimientoUnicoEnProgreso = false;
+        setEstadoObstaculo(`⚠️ Obstáculo: ${d.obstaculo ?? '-'}`);
       }
     }catch(_){}
   });
@@ -163,26 +132,12 @@ async function enviarMovimiento(idOperacion, esManual = true){
   // Si es movimiento manual (no grabando), enviar normalmente
   if(esManual && !isRecording){
     try{
-      const esUnico = esMovimientoUnico(idOperacion);
-      const duracion_ms = esUnico ? (DURACIONES_MS[idOperacion] || 1000) : 0; // 0 = indefinido para continuos
-      
       await postJSON(`${API_URL}/movimiento/registrar`, {
         id_dispositivo: DISPOSITIVO_ID,
         id_operacion: idOperacion,
-        velocidad: selectedSpeed,
-        duracion_ms: duracion_ms // ← Enviar duración para movimientos únicos
+        velocidad: selectedSpeed
       });
-      
       setEstadoMovimiento(`Movimiento: ${operaciones[idOperacion] || idOperacion} (Vel ${selectedSpeed})`);
-      
-      // Para movimientos únicos, activar flag temporalmente
-      if(esUnico){
-        movimientoUnicoEnProgreso = true;
-        // Timeout de seguridad: si no llega el ACK, liberar después de la duración + margen
-        setTimeout(() => {
-          movimientoUnicoEnProgreso = false;
-        }, duracion_ms + 500);
-      }
     }catch(_){
       alert('Error al comunicarse con el servidor');
     }
@@ -196,15 +151,7 @@ async function enviarMovimiento(idOperacion, esManual = true){
       return; // Ignorar detener automático durante grabación
     }
     
-    const esUnico = esMovimientoUnico(idOperacion);
-    const duracion_ms = esUnico ? (DURACIONES_MS[idOperacion] || 1000) : 0;
-    
-    recordedSequence.push({ 
-      operacion: idOperacion, 
-      velocidad: selectedSpeed,
-      duracion_ms: duracion_ms // ← Guardar duración también en la secuencia
-    });
-    
+    recordedSequence.push({ operacion: idOperacion, velocidad: selectedSpeed });
     if(pasoCount) pasoCount.textContent = recordedSequence.length;
     if(overlayCount) overlayCount.textContent = `${recordedSequence.length} pasos`;
     
@@ -226,6 +173,7 @@ async function enviarMovimiento(idOperacion, esManual = true){
 // ----------------- Controles Manuales -----------------
 document.querySelectorAll('.control-btn').forEach(btn => {
   let pressed = false;
+  let movimientoUnicoEjecutado = false;  // Para movimientos únicos: rastrea si ya se ejecutó en este ciclo
   
   btn.addEventListener('mousedown', () => {
     if(ejecutandoSecuencia || pressed) return;
@@ -234,26 +182,21 @@ document.querySelectorAll('.control-btn').forEach(btn => {
     const esUnico = esMovimientoUnico(operacion);
     const esContinuo = esMovimientoContinuo(operacion);
     
-    // Para movimientos únicos en modo manual: solo ejecutar una vez, incluso si se mantiene presionado
-    if(esUnico && !isRecording){
-      // Si ya hay un movimiento único en progreso, ignorar
-      if(movimientoUnicoEnProgreso){
-        return;
-      }
-      
+    // Para movimientos únicos en modo manual: solo ejecutar una vez
+    if(esUnico && !isRecording && !movimientoUnicoEjecutado){
       pressed = true;
-      movimientoUnicoEnProgreso = true;
+      movimientoUnicoEjecutado = true;
       enviarMovimiento(operacion, true);
       btn.style.opacity = '0.85';
       btn.style.transform = 'scale(0.97)';
       
-      // Resetear visual después de un tiempo
+      // Resetear el flag después de un tiempo (para permitir otra ejecución si presiona de nuevo)
       setTimeout(() => {
+        movimientoUnicoEjecutado = false;
         pressed = false;
         btn.style.opacity = '1';
         btn.style.transform = 'scale(1)';
-        // El flag movimientoUnicoEnProgreso se libera cuando llega el ACK o por timeout
-      }, 300);
+      }, 500); // 500ms de "cooldown" antes de permitir otra ejecución
       return;
     }
     
@@ -275,6 +218,7 @@ document.querySelectorAll('.control-btn').forEach(btn => {
     
     // Para movimientos únicos: no hacer nada en mouseup (ya se ejecutaron una vez)
     if(esUnico && !isRecording){
+      // No enviar "detener" para movimientos únicos, ya se ejecutaron una vez
       pressed = false;
       btn.style.opacity = '1';
       btn.style.transform = 'scale(1)';
