@@ -16,22 +16,32 @@ let selectedSpeed = SPEED.lento;
 
 // Operaciones que solo se ejecutan una vez (no continuas)
 // Solo Adelante (1) y Atrás (2) son continuos
-const MOVIMIENTOS_UNICOS = [3, 4, 5, 6, 7, 8, 9, 10, 11]; 
-// 3: Detener, 4-7: Vueltas, 8-11: Giros
+const MOVIMIENTOS_UNICOS = [3, 4, 5, 6, 7, 8, 9, 10, 11]; // 3: Detener, 4-7: Vueltas, 8-11: Giros
+
+// Duraciones en milisegundos para movimientos únicos (del programa del carrito)
+const DURACIONES_MS = {
+  3: 500,   // Detener
+  4: 1200,  // Vuelta adelante derecha
+  5: 1200,  // Vuelta adelante izquierda
+  6: 1200,  // Vuelta atrás derecha
+  7: 1200,  // Vuelta atrás izquierda
+  8: 800,   // Giro 90° derecha
+  9: 800,   // Giro 90° izquierda
+  10: 1100, // Giro 360° derecha
+  11: 1100  // Giro 360° izquierda
+};
 
 // ----------------- Estado UI -----------------
 const statusMovimiento = document.getElementById('status-movimiento');
 const statusObstaculo  = document.getElementById('status-obstaculo');
 const statusSecuencia  = document.getElementById('status-secuencia');
 const statusEvasion    = document.getElementById('status-evasion');
-
 const btnGrabar           = document.getElementById('btn-grabar');
 const btnGuardar          = document.getElementById('btn-guardar');
 const btnEjecutarGrabada  = document.getElementById('btn-ejecutar-grabada');
 const btnRepetir          = document.getElementById('btn-repetir');
 const selectSecuencia     = document.getElementById('select-secuencia');
 const nombreSecuencia     = document.getElementById('nombre-secuencia');
-
 const recordingInfo    = document.getElementById('recording-info');
 const pasoCount        = document.getElementById('paso-count');
 const overlayGrabacion = document.getElementById('overlay-grabacion');
@@ -46,11 +56,13 @@ const speed220 = document.getElementById('btn-speed-220');
 // ----------------- Estado lógico -----------------
 let websocket       = null;
 let reconnectTimer  = null;
-
 let isRecording         = false;  // Bandera: true cuando se está grabando una secuencia
 let recordedSequence    = [];     // [{operacion, velocidad}]
 let ejecutandoSecuencia = false;
 let idSecuenciaGrabada  = null;   // ID de la secuencia recién guardada
+
+// Flags para prevenir ejecuciones múltiples de movimientos únicos
+let movimientoUnicoEnProgreso = false;
 
 const operaciones = {
   1:'Adelante',2:'Atrás',3:'Detener',
@@ -58,6 +70,14 @@ const operaciones = {
   6:'Vuelta atrás derecha',7:'Vuelta atrás izquierda',
   8:'Giro 90° derecha',9:'Giro 90° izquierda',
   10:'Giro 360° derecha',11:'Giro 360° izquierda'
+};
+
+const obstaculos = {
+  1: 'Adelante',
+  2: 'Adelante-Izquierda',
+  3: 'Adelante-Derecha',
+  4: 'Adelante-Izquierda-Derecha',
+  5: 'Retrocede'
 };
 
 // ----------------- Utilidades -----------------
@@ -86,35 +106,44 @@ function esMovimientoContinuo(operacion){
 // ----------------- WebSocket -----------------
 function connectWebSocket(){
   if(websocket && (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING)) return;
-
+  
   websocket = new WebSocket(WS_URL);
-
+  
   websocket.addEventListener('open', () => {
     clearTimeout(reconnectTimer);
     websocket.send(JSON.stringify({ type:'identify', dispositivo: DISPOSITIVO_ID }));
     setEstadoMovimiento('Conectado al servidor WebSocket');
   });
-
+  
   websocket.addEventListener('close', () => {
     setEstadoMovimiento('Reconectando WebSocket...');
     reconnectTimer = setTimeout(connectWebSocket, 2000);
   });
-
+  
   websocket.addEventListener('message', evt => {
     try{
       const msg = JSON.parse(evt.data || '{}');
       if(msg.type !== 'event') return;
+      
       const ev = msg.event;
       const d  = msg.data || {};
+      
       if(ev === 'secuencia_iniciada'){
         setEstadoSecuencia(`Secuencia iniciada (ejec #${d.id_ejecucion ?? '-'})`);
       } else if(ev === 'comando_carrito'){
-        setEstadoMovimiento(`Paso: ${operaciones[d.operacion] || d.operacion} | Vel: ${d.velocidad ?? '-'}`);
+        const opId = d.operacion ?? d.operacion_id;
+        const opNombre = d.operacion_nombre || operaciones[opId] || `Operación ${opId}`;
+        setEstadoMovimiento(`Paso: ${opNombre} | Vel: ${d.velocidad ?? '-'}`);
       } else if(ev === 'secuencia_finalizada'){
         setEstadoSecuencia(`Secuencia finalizada (ejec #${d.id_ejecucion ?? '-'})`);
         ejecutandoSecuencia = false;
       } else if(ev === 'obstaculo_detectado'){
-        setEstadoObstaculo(`⚠️ Obstáculo: ${d.obstaculo ?? '-'}`);
+        const obsId = d.obstaculo ?? d.id_obstaculo ?? d.obstaculo_id;
+        const obsNombre = d.obstaculo_nombre || obstaculos[obsId] || `Obstáculo ${obsId}`;
+        setEstadoObstaculo(`⚠️ Obstáculo: ${obsNombre}`);
+      } else if(ev === 'movimiento_completado'){
+        // Cuando un movimiento único se completa, permitir el siguiente
+        movimientoUnicoEnProgreso = false;
       }
     }catch(_){}
   });
@@ -134,18 +163,32 @@ async function enviarMovimiento(idOperacion, esManual = true){
   // Si es movimiento manual (no grabando), enviar normalmente
   if(esManual && !isRecording){
     try{
+      const esUnico = esMovimientoUnico(idOperacion);
+      const duracion_ms = esUnico ? (DURACIONES_MS[idOperacion] || 1000) : 0; // 0 = indefinido para continuos
+      
       await postJSON(`${API_URL}/movimiento/registrar`, {
         id_dispositivo: DISPOSITIVO_ID,
         id_operacion: idOperacion,
-        velocidad: selectedSpeed
+        velocidad: selectedSpeed,
+        duracion_ms: duracion_ms // ← Enviar duración para movimientos únicos
       });
+      
       setEstadoMovimiento(`Movimiento: ${operaciones[idOperacion] || idOperacion} (Vel ${selectedSpeed})`);
+      
+      // Para movimientos únicos, activar flag temporalmente
+      if(esUnico){
+        movimientoUnicoEnProgreso = true;
+        // Timeout de seguridad: si no llega el ACK, liberar después de la duración + margen
+        setTimeout(() => {
+          movimientoUnicoEnProgreso = false;
+        }, duracion_ms + 500);
+      }
     }catch(_){
       alert('Error al comunicarse con el servidor');
     }
     return;
   }
-
+  
   // Si está grabando, agregar a la secuencia (excepto "Detener" que viene del mouseup)
   if(isRecording){
     // NO agregar "Detener" (operación 3) cuando viene del mouseup durante grabación
@@ -153,9 +196,18 @@ async function enviarMovimiento(idOperacion, esManual = true){
       return; // Ignorar detener automático durante grabación
     }
     
-    recordedSequence.push({ operacion: idOperacion, velocidad: selectedSpeed });
+    const esUnico = esMovimientoUnico(idOperacion);
+    const duracion_ms = esUnico ? (DURACIONES_MS[idOperacion] || 1000) : 0;
+    
+    recordedSequence.push({ 
+      operacion: idOperacion, 
+      velocidad: selectedSpeed,
+      duracion_ms: duracion_ms // ← Guardar duración también en la secuencia
+    });
+    
     if(pasoCount) pasoCount.textContent = recordedSequence.length;
     if(overlayCount) overlayCount.textContent = `${recordedSequence.length} pasos`;
+    
     if(overlayMovs){
       if(recordedSequence.length === 1) overlayMovs.innerHTML = '';
       const item = document.createElement('div');
@@ -174,8 +226,7 @@ async function enviarMovimiento(idOperacion, esManual = true){
 // ----------------- Controles Manuales -----------------
 document.querySelectorAll('.control-btn').forEach(btn => {
   let pressed = false;
-  let movimientoUnicoEjecutado = false;  // Para movimientos únicos: rastrea si ya se ejecutó en este ciclo
-
+  
   btn.addEventListener('mousedown', () => {
     if(ejecutandoSecuencia || pressed) return;
     
@@ -183,21 +234,26 @@ document.querySelectorAll('.control-btn').forEach(btn => {
     const esUnico = esMovimientoUnico(operacion);
     const esContinuo = esMovimientoContinuo(operacion);
     
-    // Para movimientos únicos en modo manual: solo ejecutar una vez
-    if(esUnico && !isRecording && !movimientoUnicoEjecutado){
+    // Para movimientos únicos en modo manual: solo ejecutar una vez, incluso si se mantiene presionado
+    if(esUnico && !isRecording){
+      // Si ya hay un movimiento único en progreso, ignorar
+      if(movimientoUnicoEnProgreso){
+        return;
+      }
+      
       pressed = true;
-      movimientoUnicoEjecutado = true;
+      movimientoUnicoEnProgreso = true;
       enviarMovimiento(operacion, true);
       btn.style.opacity = '0.85';
       btn.style.transform = 'scale(0.97)';
       
-      // Resetear el flag después de un tiempo (para permitir otra ejecución si presiona de nuevo)
+      // Resetear visual después de un tiempo
       setTimeout(() => {
-        movimientoUnicoEjecutado = false;
         pressed = false;
         btn.style.opacity = '1';
         btn.style.transform = 'scale(1)';
-      }, 500); // 500ms de "cooldown" antes de permitir otra ejecución
+        // El flag movimientoUnicoEnProgreso se libera cuando llega el ACK o por timeout
+      }, 300);
       return;
     }
     
@@ -209,7 +265,7 @@ document.querySelectorAll('.control-btn').forEach(btn => {
       btn.style.transform = 'scale(0.97)';
     }
   });
-
+  
   const reset = () => {
     if(!pressed) return;
     
@@ -219,7 +275,6 @@ document.querySelectorAll('.control-btn').forEach(btn => {
     
     // Para movimientos únicos: no hacer nada en mouseup (ya se ejecutaron una vez)
     if(esUnico && !isRecording){
-      // No enviar "detener" para movimientos únicos, ya se ejecutaron una vez
       pressed = false;
       btn.style.opacity = '1';
       btn.style.transform = 'scale(1)';
@@ -240,7 +295,7 @@ document.querySelectorAll('.control-btn').forEach(btn => {
       btn.style.transform = 'scale(1)';
     }
   };
-
+  
   btn.addEventListener('mouseup', reset);
   btn.addEventListener('mouseleave', reset);
 });
@@ -284,9 +339,9 @@ btnGuardar?.addEventListener('click', async () => {
   const nombre = (nombreSecuencia?.value || '').trim();
   if(!nombre){ alert('Escribe un nombre para la secuencia'); return; }
   if(recordedSequence.length === 0){ alert('No hay movimientos grabados'); return; }
-
+  
   const velDefault = recordedSequence[0]?.velocidad ?? SPEED.lento;
-
+  
   try{
     // Enviar secuencia con pasos al backend
     const data = await postJSON(`${API_URL}/secuencia/demo/agregar`, {
@@ -298,9 +353,8 @@ btnGuardar?.addEventListener('click', async () => {
     
     const idSec = data?.[0]?.id_secuencia ?? data?.[0]?.ID_SECUENCIA;
     if(!idSec){ alert('No se pudo recuperar el ID de la secuencia'); return; }
-
+    
     idSecuenciaGrabada = idSec;
-
     alert(`✅ Secuencia "${nombre}" guardada (ID ${idSec})`);
     nombreSecuencia.value = '';
     btnGuardar.disabled = true;
@@ -342,6 +396,7 @@ async function cargarSecuencias(){
     const res = await fetch(`${API_URL}/secuencia/demo/ultimas20/${DISPOSITIVO_ID}`);
     const data = await res.json();
     if(!selectSecuencia) return;
+    
     selectSecuencia.innerHTML = '<option value="">Seleccionar secuencia...</option>';
     (data || []).forEach(s => {
       const id  = s.id_secuencia ?? s.ID_SECUENCIA ?? s.id;
@@ -358,7 +413,7 @@ async function cargarSecuencias(){
 btnRepetir?.addEventListener('click', async () => {
   const idSec = parseInt(selectSecuencia?.value || '0',10);
   if(!idSec){ alert('Selecciona una secuencia'); return; }
-
+  
   try{
     ejecutandoSecuencia = true;
     setEstadoSecuencia(`Repitiendo secuencia #${idSec}...`);
@@ -379,7 +434,6 @@ btnRepetir?.addEventListener('click', async () => {
 document.addEventListener('DOMContentLoaded', () => {
   setSpeedActive(speed150);               // Lento por defecto
   selectedSpeed = SPEED.lento;
-
   connectWebSocket();
   cargarSecuencias();
 });
