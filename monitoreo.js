@@ -6,7 +6,6 @@
    - Último movimiento / obstáculo
    - Feed en tiempo real vía WSS
    ============================================ */
-
 const API_URL = 'https://silencesuzuka.duckdns.org/api';
 const WS_URL  = 'wss://silencesuzuka.duckdns.org/ws';
 const DISPOSITIVO_ID = 1;
@@ -39,7 +38,6 @@ function pickFirst(rec){
 }
 
 function el(id){ return document.getElementById(id); }
-
 function setText(id, txt){ const e = el(id); if(e) e.textContent = txt ?? '-'; }
 
 // --------- Último Movimiento ----------
@@ -48,18 +46,18 @@ async function cargarUltimoMovimiento(){
     const res = await fetch(`${API_URL}/movimiento/ultimo/${DISPOSITIVO_ID}`);
     const data = await res.json();
     const r = Array.isArray(data) ? data[0] : data;
-
     const idEvento = r?.id_evento ?? r?.ID_EVENTO ?? '-';
     const opId     = r?.id_operacion ?? r?.ID_OPERACION ?? r?.operacion ?? '-';
     const opNom    = OPS[opId] ?? r?.operacion ?? '-';
+    const velocidad = r?.velocidad ?? r?.VELOCIDAD ?? '-';
     const fecha    = r?.creado_en ?? r?.CREADO_EN ?? r?.fecha ?? '-';
-
     setText('um-id', idEvento);
     setText('um-op-id', opId);
     setText('um-op-nombre', opNom);
+    setText('um-velocidad', velocidad);
     setText('um-fecha', fmtDate(fecha));
   }catch(_){
-    setText('um-id','-'); setText('um-op-id','-'); setText('um-op-nombre','-'); setText('um-fecha','-');
+    setText('um-id','-'); setText('um-op-id','-'); setText('um-op-nombre','-'); setText('um-velocidad','-'); setText('um-fecha','-');
   }
 }
 
@@ -70,30 +68,29 @@ async function cargarUltimos10Movimientos(){
     if(!tb) return;
     const res = await fetch(`${API_URL}/movimiento/ultimos10/${DISPOSITIVO_ID}`);
     const data = await res.json();
-
     tb.innerHTML = '';
     (data || []).forEach(r => {
       const idEvento = r?.id_evento ?? r?.ID_EVENTO ?? '-';
       const opId     = r?.id_operacion ?? r?.ID_OPERACION ?? r?.operacion ?? '-';
       const opNom    = OPS[opId] ?? r?.operacion ?? '-';
+      const velocidad = r?.velocidad ?? r?.VELOCIDAD ?? '-';
       const fecha    = r?.creado_en ?? r?.CREADO_EN ?? r?.fecha ?? '-';
-
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${idEvento}</td>
         <td>${opId}</td>
         <td>${opNom}</td>
+        <td>${velocidad}</td>
         <td>${fmtDate(fecha)}</td>
       `;
       tb.appendChild(tr);
     });
-
     if(tb.children.length === 0){
-      tb.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Sin datos</td></tr>`;
+      tb.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Sin datos</td></tr>`;
     }
   }catch(_){
     const tb = el('tabla-movimientos');
-    if(tb) tb.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Error al cargar</td></tr>`;
+    if(tb) tb.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error al cargar</td></tr>`;
   }
 }
 
@@ -102,7 +99,6 @@ async function cargarUltimoObstaculo(){
   try{
     const json = await (await fetch(`${API_URL}/obstaculo/ultimo/${DISPOSITIVO_ID}`)).json();
     const r = Array.isArray(json) ? json[0] : json;
-
     setText('uo-id',     r?.id_evento_obstaculo ?? '-');
     setText('uo-obs-id', r?.id_obstaculo ?? '-');
     setText('uo-desc',   r?.descripcion ?? '-');
@@ -121,7 +117,6 @@ async function cargarUltimos10Obstaculos(){
     const res = await fetch(`${API_URL}/obstaculo/ultimos10/${DISPOSITIVO_ID}`);
     const json = await res.json();
     const data = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
-
     tb.innerHTML = '';
     data.forEach(r => {
       const id    = r.id_evento_obstaculo ?? r.ID_EVENTO_OBSTACULO ?? '-';
@@ -129,7 +124,6 @@ async function cargarUltimos10Obstaculos(){
       const desc  = r.descripcion         ?? r.DESCRIPCION         ?? '-';
       const modo  = r.modo                ?? r.MODO                ?? '-';
       const fecha = r.creado_en           ?? r.CREADO_EN           ?? r.fecha ?? '-';
-
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${id}</td>
@@ -140,7 +134,6 @@ async function cargarUltimos10Obstaculos(){
       `;
       tb.appendChild(tr);
     });
-
     if(tb.children.length === 0){
       tb.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Sin datos</td></tr>`;
     }
@@ -157,7 +150,6 @@ async function cargarUltimas20Secuencias(){
     if(!tb) return;
     const res = await fetch(`${API_URL}/secuencia/demo/ultimas20/${DISPOSITIVO_ID}`);
     const data = await res.json();
-
     tb.innerHTML = '';
     (data || []).forEach(r => {
       const id     = r?.id_secuencia ?? r?.ID_SECUENCIA ?? '-';
@@ -165,7 +157,6 @@ async function cargarUltimas20Secuencias(){
       const nombre = r?.nombre ?? r?.NOMBRE ?? '-';
       const origen = r?.modo ?? r?.origen ?? r?.ORIGEN ?? 'AUTO';
       const fecha  = r?.creado_en ?? r?.CREADO_EN ?? '-';
-
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${id}</td>
@@ -176,7 +167,6 @@ async function cargarUltimas20Secuencias(){
       `;
       tb.appendChild(tr);
     });
-
     if(tb.children.length === 0){
       tb.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Sin datos</td></tr>`;
     }
@@ -197,7 +187,6 @@ function openWS(){
     try{
       const msg = JSON.parse(e.data || '{}');
       if(msg.type !== 'event') return;
-
       const ev = msg.event;
       // Ante eventos relevantes, refrescamos datasets
       if(ev === 'comando_carrito' || ev === 'secuencia_iniciada' || ev === 'secuencia_finalizada'){
