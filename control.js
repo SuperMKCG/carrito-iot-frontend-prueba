@@ -1,9 +1,8 @@
 /* ============================================
    control.js — Control Carrito (POST + WSS)
-   Opción B: Repetir usa pasos locales (localStorage)
-   - Guardar: /secuencia/demo/agregar (encabezado) + persistir pasos localmente
-   - Ejecutar grabada: /secuencia/ejecutar_orquestada con recordedSequence
-   - Repetir: /secuencia/ejecutar_orquestada con pasos locales (seq_steps_<ID>)
+   - Guardar: /secuencia/demo/agregar con pasos en BD
+   - Ejecutar grabada: /secuencia/ejecutar (crea secuencia temporal o usa la guardada)
+   - Repetir: /secuencia/demo/repetir (obtiene pasos desde BD)
    ============================================ */
 
 // ----------------- Config -----------------
@@ -43,9 +42,10 @@ const speed220 = document.getElementById('btn-speed-220');
 let websocket       = null;
 let reconnectTimer  = null;
 
-let isRecording         = false;
-let recordedSequence    = []; // [{operacion, velocidad}]
+let isRecording         = false;  // Bandera: true cuando se está grabando una secuencia
+let recordedSequence    = [];     // [{operacion, velocidad}]
 let ejecutandoSecuencia = false;
+let idSecuenciaGrabada  = null;   // ID de la secuencia recién guardada
 
 const operaciones = {
   1:'Adelante',2:'Atrás',3:'Detener',
@@ -67,17 +67,6 @@ function setEstadoMovimiento(txt){ if(statusMovimiento) statusMovimiento.textCon
 function setEstadoSecuencia(txt){ if(statusSecuencia) statusSecuencia.textContent = txt; }
 function setEstadoObstaculo(txt){ if(statusObstaculo) statusObstaculo.textContent = txt; }
 function setEstadoEvasion(txt){ if(statusEvasion) statusEvasion.textContent = txt; }
-
-// Guardar/leer pasos locales de una secuencia por ID
-function saveLocalSteps(idSec, pasos){
-  try { localStorage.setItem(`seq_steps_${idSec}`, JSON.stringify(pasos || [])); } catch(_){}
-}
-function loadLocalSteps(idSec){
-  try {
-    const s = localStorage.getItem(`seq_steps_${idSec}`);
-    return s ? JSON.parse(s) : [];
-  } catch(_){ return []; }
-}
 
 // ----------------- WebSocket -----------------
 function connectWebSocket(){
@@ -124,36 +113,46 @@ async function postJSON(url, body){
   return data;
 }
 
-async function enviarMovimiento(idOperacion){
+async function enviarMovimiento(idOperacion, esManual = true){
   if(idOperacion == null) return;
-  try{
-    await postJSON(`${API_URL}/movimiento/registrar`, {
-      id_dispositivo: DISPOSITIVO_ID,
-      id_operacion: idOperacion,
-      velocidad: selectedSpeed
-    });
-
-    if(isRecording){
-      recordedSequence.push({ operacion: idOperacion, velocidad: selectedSpeed });
-      if(pasoCount) pasoCount.textContent = recordedSequence.length;
-      if(overlayCount) overlayCount.textContent = `${recordedSequence.length} pasos`;
-      if(overlayMovs){
-        if(recordedSequence.length === 1) overlayMovs.innerHTML = '';
-        const item = document.createElement('div');
-        item.className = 'movimiento-item';
-        item.innerHTML = `
-          <span class="paso-numero">${recordedSequence.length}</span>
-          <span class="operacion-nombre">${operaciones[idOperacion] || idOperacion}</span>
-          <span class="tiempo-ms">${selectedSpeed}</span>
-        `;
-        overlayMovs.appendChild(item);
-        overlayMovs.scrollTop = overlayMovs.scrollHeight;
-      }
-    }else{
+  
+  // Si es movimiento manual (no grabando), enviar normalmente
+  if(esManual && !isRecording){
+    try{
+      await postJSON(`${API_URL}/movimiento/registrar`, {
+        id_dispositivo: DISPOSITIVO_ID,
+        id_operacion: idOperacion,
+        velocidad: selectedSpeed
+      });
       setEstadoMovimiento(`Movimiento: ${operaciones[idOperacion] || idOperacion} (Vel ${selectedSpeed})`);
+    }catch(_){
+      alert('Error al comunicarse con el servidor');
     }
-  }catch(_){
-    alert('Error al comunicarse con el servidor');
+    return;
+  }
+
+  // Si está grabando, agregar a la secuencia (excepto "Detener" que viene del mouseup)
+  if(isRecording){
+    // NO agregar "Detener" (operación 3) cuando viene del mouseup durante grabación
+    if(idOperacion === 3 && !esManual){
+      return; // Ignorar detener automático durante grabación
+    }
+    
+    recordedSequence.push({ operacion: idOperacion, velocidad: selectedSpeed });
+    if(pasoCount) pasoCount.textContent = recordedSequence.length;
+    if(overlayCount) overlayCount.textContent = `${recordedSequence.length} pasos`;
+    if(overlayMovs){
+      if(recordedSequence.length === 1) overlayMovs.innerHTML = '';
+      const item = document.createElement('div');
+      item.className = 'movimiento-item';
+      item.innerHTML = `
+        <span class="paso-numero">${recordedSequence.length}</span>
+        <span class="operacion-nombre">${operaciones[idOperacion] || idOperacion}</span>
+        <span class="tiempo-ms">${selectedSpeed}</span>
+      `;
+      overlayMovs.appendChild(item);
+      overlayMovs.scrollTop = overlayMovs.scrollHeight;
+    }
   }
 }
 
@@ -165,7 +164,11 @@ document.querySelectorAll('.control-btn').forEach(btn => {
     if(ejecutandoSecuencia || pressed) return;
     pressed = true;
     const operacion = parseInt(btn.dataset.op, 10);
-    enviarMovimiento(operacion);
+    
+    // Si está grabando, agregar a secuencia (esManual=true porque el usuario presionó el botón)
+    // Si NO está grabando, enviar movimiento manual
+    enviarMovimiento(operacion, true);
+    
     btn.style.opacity = '0.85';
     btn.style.transform = 'scale(0.97)';
   });
@@ -173,8 +176,14 @@ document.querySelectorAll('.control-btn').forEach(btn => {
   const reset = () => {
     if(!pressed) return;
     pressed = false;
-    enviarMovimiento(3); // detener
-    setEstadoMovimiento('Detenido');
+    
+    // Solo enviar "detener" si NO está grabando
+    // Si está grabando, NO agregar "detener" a la secuencia (esManual=false)
+    if(!isRecording){
+      enviarMovimiento(3, true); // Detener manual
+      setEstadoMovimiento('Detenido');
+    }
+    
     btn.style.opacity = '1';
     btn.style.transform = 'scale(1)';
   };
@@ -193,6 +202,7 @@ btnGrabar?.addEventListener('click', () => {
   if(!isRecording){
     isRecording = true;
     recordedSequence = [];
+    idSecuenciaGrabada = null;
     btnGrabar.textContent = '⏹️ Detener Grabación';
     btnGrabar.classList.remove('btn-danger');
     btnGrabar.classList.add('btn-secondary');
@@ -216,7 +226,7 @@ btnGrabar?.addEventListener('click', () => {
   }
 });
 
-// Guardar encabezado + pasos locales (Opción B)
+// Guardar secuencia con pasos en BD
 btnGuardar?.addEventListener('click', async () => {
   const nombre = (nombreSecuencia?.value || '').trim();
   if(!nombre){ alert('Escribe un nombre para la secuencia'); return; }
@@ -225,16 +235,18 @@ btnGuardar?.addEventListener('click', async () => {
   const velDefault = recordedSequence[0]?.velocidad ?? SPEED.lento;
 
   try{
+    // Enviar secuencia con pasos al backend
     const data = await postJSON(`${API_URL}/secuencia/demo/agregar`, {
       id_dispositivo: DISPOSITIVO_ID,
       nombre: nombre,
-      velocidad: velDefault
+      velocidad: velDefault,
+      pasos: recordedSequence  // ← Enviar array de pasos
     });
+    
     const idSec = data?.[0]?.id_secuencia ?? data?.[0]?.ID_SECUENCIA;
     if(!idSec){ alert('No se pudo recuperar el ID de la secuencia'); return; }
 
-    // persiste pasos locales asociados al ID
-    saveLocalSteps(idSec, recordedSequence);
+    idSecuenciaGrabada = idSec;
 
     alert(`✅ Secuencia "${nombre}" guardada (ID ${idSec})`);
     nombreSecuencia.value = '';
@@ -242,29 +254,36 @@ btnGuardar?.addEventListener('click', async () => {
     btnEjecutarGrabada.disabled = false;
     if(overlayGrabacion) overlayGrabacion.style.display = 'none';
     await cargarSecuencias();
-  }catch(_){
+  }catch(e){
+    console.error('Error al guardar:', e);
     alert('Error al guardar la secuencia');
   }
 });
 
-// Ejecutar la secuencia recién grabada (recordedSequence en memoria)
+// Ejecutar la secuencia recién grabada (usa el ID guardado)
 btnEjecutarGrabada?.addEventListener('click', async () => {
-  if(recordedSequence.length === 0){ alert('Primero graba y guarda una secuencia'); return; }
+  if(!idSecuenciaGrabada){
+    alert('Primero guarda la secuencia grabada');
+    return;
+  }
+  
   try{
     ejecutandoSecuencia = true;
     setEstadoSecuencia('Ejecutando secuencia grabada...');
-    await postJSON(`${API_URL}/secuencia/ejecutar_orquestada`, {
+    
+    // Usar el endpoint de ejecutar que obtiene pasos desde BD
+    await postJSON(`${API_URL}/secuencia/ejecutar`, {
       id_dispositivo: DISPOSITIVO_ID,
-      id_secuencia: 0,
-      pasos: recordedSequence
+      id_secuencia: idSecuenciaGrabada
     });
-  }catch(_){
+  }catch(e){
     ejecutandoSecuencia = false;
+    console.error('Error al ejecutar:', e);
     alert('Error al ejecutar la secuencia grabada');
   }
 });
 
-// ----------------- Repetir (Opción B: usa pasos locales) -----------------
+// ----------------- Repetir (obtiene pasos desde BD) -----------------
 async function cargarSecuencias(){
   try{
     const res = await fetch(`${API_URL}/secuencia/demo/ultimas20/${DISPOSITIVO_ID}`);
@@ -287,22 +306,18 @@ btnRepetir?.addEventListener('click', async () => {
   const idSec = parseInt(selectSecuencia?.value || '0',10);
   if(!idSec){ alert('Selecciona una secuencia'); return; }
 
-  const pasosLocales = loadLocalSteps(idSec);
-  if(!pasosLocales || pasosLocales.length === 0){
-    alert('Esta secuencia no tiene pasos almacenados localmente. Vuelve a grabarla y guardarla desde este navegador.');
-    return;
-  }
-
   try{
     ejecutandoSecuencia = true;
     setEstadoSecuencia(`Repitiendo secuencia #${idSec}...`);
-    await postJSON(`${API_URL}/secuencia/ejecutar_orquestada`, {
+    
+    // Usar el endpoint de repetir que obtiene pasos desde BD automáticamente
+    await postJSON(`${API_URL}/secuencia/demo/repetir`, {
       id_dispositivo: DISPOSITIVO_ID,
-      id_secuencia: idSec,
-      pasos: pasosLocales
+      id_secuencia: idSec
     });
-  }catch(_){
+  }catch(e){
     ejecutandoSecuencia = false;
+    console.error('Error al repetir:', e);
     alert('Error al repetir la secuencia');
   }
 });
