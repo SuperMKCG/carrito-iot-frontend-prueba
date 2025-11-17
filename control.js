@@ -201,12 +201,20 @@ async function enviarMovimiento(idOperacion, esManual = true){
     }
 }
 
-// ----------------- Controles Manuales -----------------
+// ----------------- Controles Manuales (Mouse + Touch) -----------------
 document.querySelectorAll('.control-btn').forEach(btn => {
     let pressed = false;
-    let movimientoUnicoEjecutado = false;  // Para movimientos únicos: rastrea si ya se ejecutó en este ciclo
+    let movimientoUnicoEjecutado = false;
+    let lastTouchTime = 0;
     
-    btn.addEventListener('mousedown', () => {
+    // Función para iniciar movimiento (compartida entre mouse y touch)
+    const iniciarMovimiento = (e) => {
+        // Prevenir comportamiento por defecto (scroll, zoom, etc.)
+        if(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
         if(ejecutandoSecuencia || pressed) return;
         
         const operacion = parseInt(btn.dataset.op, 10);
@@ -221,35 +229,40 @@ document.querySelectorAll('.control-btn').forEach(btn => {
             btn.style.opacity = '0.85';
             btn.style.transform = 'scale(0.97)';
             
-            // Resetear el flag después de un tiempo (para permitir otra ejecución si presiona de nuevo)
             setTimeout(() => {
                 movimientoUnicoEjecutado = false;
                 pressed = false;
                 btn.style.opacity = '1';
                 btn.style.transform = 'scale(1)';
-            }, DURACIONES_MOVIMIENTOS[operacion] || 1000); // Usar la duración del movimiento
+            }, DURACIONES_MOVIMIENTOS[operacion] || 1000);
             return;
         }
         
-        // Para movimientos continuos (Adelante/Atrás) o durante grabación: comportamiento normal
+        // Para movimientos continuos (Adelante/Atrás) o durante grabación
         if(esContinuo || isRecording){
             pressed = true;
             enviarMovimiento(operacion, true);
             btn.style.opacity = '0.85';
             btn.style.transform = 'scale(0.97)';
         }
-    });
+    };
     
-    const reset = () => {
+    // Función para finalizar movimiento (compartida entre mouse y touch)
+    const finalizarMovimiento = (e) => {
+        // Prevenir comportamiento por defecto
+        if(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
         if(!pressed) return;
         
         const operacion = parseInt(btn.dataset.op, 10);
         const esUnico = esMovimientoUnico(operacion);
         const esContinuo = esMovimientoContinuo(operacion);
         
-        // Para movimientos únicos: no hacer nada en mouseup (ya se ejecutaron una vez)
+        // Para movimientos únicos: no hacer nada en mouseup/touchend
         if(esUnico && !isRecording){
-            // No enviar "detener" para movimientos únicos, ya se ejecutaron una vez
             pressed = false;
             btn.style.opacity = '1';
             btn.style.transform = 'scale(1)';
@@ -271,8 +284,28 @@ document.querySelectorAll('.control-btn').forEach(btn => {
         }
     };
     
-    btn.addEventListener('mouseup', reset);
-    btn.addEventListener('mouseleave', reset);
+    // Eventos de MOUSE (desktop)
+    btn.addEventListener('mousedown', (e) => {
+        // Si hubo un touch reciente (< 300ms), ignorar el mousedown
+        if(Date.now() - lastTouchTime < 300) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        iniciarMovimiento(e);
+    });
+    
+    btn.addEventListener('mouseup', finalizarMovimiento);
+    btn.addEventListener('mouseleave', finalizarMovimiento);
+    
+    // Eventos de TOUCH (móvil/tablet)
+    btn.addEventListener('touchstart', (e) => {
+        lastTouchTime = Date.now();
+        iniciarMovimiento(e);
+    }, { passive: false });
+    
+    btn.addEventListener('touchend', finalizarMovimiento, { passive: false });
+    btn.addEventListener('touchcancel', finalizarMovimiento, { passive: false });
 });
 
 // ----------------- Velocidad (chips) -----------------
