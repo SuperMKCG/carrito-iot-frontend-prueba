@@ -14,6 +14,11 @@ const DISPOSITIVO_ID = 1;
 const SPEED = { lento: 150, medio: 190, alto: 220 };
 let selectedSpeed = SPEED.lento;
 
+// Operaciones que solo se ejecutan una vez (no continuas)
+// Solo Adelante (1) y Atrás (2) son continuos
+const MOVIMIENTOS_UNICOS = [3, 4, 5, 6, 7, 8, 9, 10, 11]; 
+// 3: Detener, 4-7: Vueltas, 8-11: Giros
+
 // ----------------- Estado UI -----------------
 const statusMovimiento = document.getElementById('status-movimiento');
 const statusObstaculo  = document.getElementById('status-obstaculo');
@@ -67,6 +72,16 @@ function setEstadoMovimiento(txt){ if(statusMovimiento) statusMovimiento.textCon
 function setEstadoSecuencia(txt){ if(statusSecuencia) statusSecuencia.textContent = txt; }
 function setEstadoObstaculo(txt){ if(statusObstaculo) statusObstaculo.textContent = txt; }
 function setEstadoEvasion(txt){ if(statusEvasion) statusEvasion.textContent = txt; }
+
+// Verificar si es un movimiento único (no continuo)
+function esMovimientoUnico(operacion){
+  return MOVIMIENTOS_UNICOS.includes(operacion);
+}
+
+// Verificar si es movimiento continuo (solo Adelante y Atrás)
+function esMovimientoContinuo(operacion){
+  return operacion === 1 || operacion === 2; // Adelante o Atrás
+}
 
 // ----------------- WebSocket -----------------
 function connectWebSocket(){
@@ -159,33 +174,71 @@ async function enviarMovimiento(idOperacion, esManual = true){
 // ----------------- Controles Manuales -----------------
 document.querySelectorAll('.control-btn').forEach(btn => {
   let pressed = false;
+  let movimientoUnicoEjecutado = false;  // Para movimientos únicos: rastrea si ya se ejecutó en este ciclo
 
   btn.addEventListener('mousedown', () => {
     if(ejecutandoSecuencia || pressed) return;
-    pressed = true;
+    
     const operacion = parseInt(btn.dataset.op, 10);
+    const esUnico = esMovimientoUnico(operacion);
+    const esContinuo = esMovimientoContinuo(operacion);
     
-    // Si está grabando, agregar a secuencia (esManual=true porque el usuario presionó el botón)
-    // Si NO está grabando, enviar movimiento manual
-    enviarMovimiento(operacion, true);
+    // Para movimientos únicos en modo manual: solo ejecutar una vez
+    if(esUnico && !isRecording && !movimientoUnicoEjecutado){
+      pressed = true;
+      movimientoUnicoEjecutado = true;
+      enviarMovimiento(operacion, true);
+      btn.style.opacity = '0.85';
+      btn.style.transform = 'scale(0.97)';
+      
+      // Resetear el flag después de un tiempo (para permitir otra ejecución si presiona de nuevo)
+      setTimeout(() => {
+        movimientoUnicoEjecutado = false;
+        pressed = false;
+        btn.style.opacity = '1';
+        btn.style.transform = 'scale(1)';
+      }, 500); // 500ms de "cooldown" antes de permitir otra ejecución
+      return;
+    }
     
-    btn.style.opacity = '0.85';
-    btn.style.transform = 'scale(0.97)';
+    // Para movimientos continuos (Adelante/Atrás) o durante grabación: comportamiento normal
+    if(esContinuo || isRecording){
+      pressed = true;
+      enviarMovimiento(operacion, true);
+      btn.style.opacity = '0.85';
+      btn.style.transform = 'scale(0.97)';
+    }
   });
 
   const reset = () => {
     if(!pressed) return;
-    pressed = false;
     
-    // Solo enviar "detener" si NO está grabando
-    // Si está grabando, NO agregar "detener" a la secuencia (esManual=false)
-    if(!isRecording){
-      enviarMovimiento(3, true); // Detener manual
-      setEstadoMovimiento('Detenido');
+    const operacion = parseInt(btn.dataset.op, 10);
+    const esUnico = esMovimientoUnico(operacion);
+    const esContinuo = esMovimientoContinuo(operacion);
+    
+    // Para movimientos únicos: no hacer nada en mouseup (ya se ejecutaron una vez)
+    if(esUnico && !isRecording){
+      // No enviar "detener" para movimientos únicos, ya se ejecutaron una vez
+      pressed = false;
+      btn.style.opacity = '1';
+      btn.style.transform = 'scale(1)';
+      return;
     }
     
-    btn.style.opacity = '1';
-    btn.style.transform = 'scale(1)';
+    // Para movimientos continuos (Adelante/Atrás): enviar "detener" solo si NO está grabando
+    if(esContinuo && !isRecording){
+      pressed = false;
+      enviarMovimiento(3, true); // Detener manual
+      setEstadoMovimiento('Detenido');
+      btn.style.opacity = '1';
+      btn.style.transform = 'scale(1)';
+    } else {
+      // Durante grabación, solo resetear estado visual
+      pressed = false;
+      btn.style.opacity = '1';
+      btn.style.transform = 'scale(1)';
+    }
   };
 
   btn.addEventListener('mouseup', reset);
