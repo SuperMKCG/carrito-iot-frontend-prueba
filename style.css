@@ -78,9 +78,9 @@ body {
   cursor: pointer;
   min-width: 180px;
   text-align: center;
-  -webkit-tap-highlight-color: transparent; /* Eliminar highlight azul en iOS/Android */
-  touch-action: manipulation; /* Evitar zoom/scroll accidental */
-  user-select: none; /* Evitar selección de texto al tocar */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 .control-btn:active {
@@ -433,32 +433,45 @@ body {
 }
 
 /* ============================================
+   AJUSTES ESPECÍFICOS PARA PANEL DE MOVIMIENTO
+   ============================================ */
+
+/* Contenedor de controles de movimiento */
+.app-card .d-flex.flex-column.align-items-center {
+  width: 100%;
+}
+
+/* Grupo de botones - mantener estructura de 3 filas */
+.app-card .d-flex.flex-column.align-items-center > .d-flex {
+  width: 100%;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+}
+
+/* ============================================
    RESPONSIVE EXTRA (MÓVIL Y TABLET)
    ============================================ */
 
 /* Tablet ≤ 992px */
 @media (max-width: 992px) {
-  /* Botonera de velocidad: permite salto de línea y mejor tactilidad */
   .speed-group .btn {
     margin: 4px 6px;
     padding: 8px 14px;
     border-radius: 10px;
   }
   
-  /* Cards con respiración */
   .app-card,
   .card {
     margin-bottom: 1rem;
   }
   
-  /* Tablas: filas más altas para toque */
   .table-monitor td,
   .table-monitor th {
     padding-top: 0.6rem;
     padding-bottom: 0.6rem;
   }
   
-  /* Overlay: baja un poco para no tapar encabezado */
   .recording-overlay {
     top: 72px;
     right: 16px;
@@ -467,23 +480,68 @@ body {
 
 /* Móvil ≤ 576px (teléfonos) */
 @media (max-width: 576px) {
-  /* Títulos y valores más compactos */
   h1, h2, h3, h4, h5, h6 {
     line-height: 1.2;
     margin-bottom: 0.6rem;
   }
   
-  /* Botones de control: más pequeños y anchos fluidos */
   .control-btn {
     min-width: 120px;
     padding: 10px 12px;
     font-size: 12px;
   }
   
+  /* Panel de controles de movimiento - mantener estructura */
+  .app-card h5 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .app-card .d-flex.flex-column.align-items-center {
+    gap: 0.75rem;
+  }
+  
+  .app-card .d-flex.flex-column.align-items-center > .d-flex {
+    gap: 0.4rem;
+    padding: 0 0.5rem;
+    flex-wrap: nowrap !important;
+  }
+  
+  /* Botones de control en móvil - mantener tamaño uniforme */
   .control-btn-compact {
-    min-width: 110px !important;
-    padding: 0.45rem 0.65rem !important;
-    font-size: 0.72rem !important;
+    min-width: 0 !important;
+    flex: 1 1 auto;
+    padding: 0.5rem 0.4rem !important;
+    font-size: 0.7rem !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* Fila superior (3 botones) */
+  .app-card .d-flex.flex-column.align-items-center > .d-flex:first-child .control-btn-compact {
+    flex: 1 1 calc(33.33% - 0.3rem);
+    max-width: calc(33.33% - 0.3rem);
+  }
+  
+  /* Fila media (5 botones) */
+  .app-card .d-flex.flex-column.align-items-center > .d-flex:nth-child(2) .control-btn-compact {
+    flex: 1 1 calc(20% - 0.25rem);
+    max-width: calc(20% - 0.25rem);
+    font-size: 0.65rem !important;
+    padding: 0.45rem 0.3rem !important;
+  }
+  
+  /* Botón "Detener" en el centro - un poco más ancho */
+  .app-card .d-flex.flex-column.align-items-center > .d-flex:nth-child(2) .btn-stop {
+    flex: 1.2 1 calc(20% - 0.25rem);
+    max-width: calc(24% - 0.25rem);
+  }
+  
+  /* Fila inferior (3 botones) */
+  .app-card .d-flex.flex-column.align-items-center > .d-flex:last-child .control-btn-compact {
+    flex: 1 1 calc(33.33% - 0.3rem);
+    max-width: calc(33.33% - 0.3rem);
   }
   
   /* Botonera de velocidad: ocupa todo el ancho y salta en filas */
@@ -493,13 +551,12 @@ body {
   }
   
   .speed-group .btn {
-    flex: 1 1 calc(50% - 12px); /* 2 por fila en móvil */
+    flex: 1 1 calc(50% - 12px);
     margin: 4px 6px;
     text-align: center;
     white-space: nowrap;
   }
   
-  /* Panel de estado compacto */
   .status-panel {
     padding: 14px;
     border-radius: 10px;
@@ -513,7 +570,6 @@ body {
     font-size: 15px;
   }
   
-  /* Tablas: tipografía menor y scroll suave */
   .table-monitor {
     font-size: 12px;
   }
@@ -523,12 +579,10 @@ body {
     padding: 0.5rem 0.6rem;
   }
   
-  /* Feed de eventos más contenido en pantalla */
   #feed {
     max-height: 50vh !important;
   }
   
-  /* Overlay de grabación: acomodo en pantallas pequeñas */
   .recording-overlay {
     top: 64px;
     right: 12px;
@@ -538,6 +592,19 @@ body {
     min-width: 240px;
     max-width: 320px;
     padding: 0.8rem;
+  }
+}
+
+/* Ajustes para tablets */
+@media (min-width: 577px) and (max-width: 768px) {
+  .control-btn-compact {
+    min-width: 130px !important;
+    padding: 0.55rem 0.8rem !important;
+    font-size: 0.75rem !important;
+  }
+  
+  .app-card .d-flex.flex-column.align-items-center > .d-flex {
+    gap: 0.6rem;
   }
 }
 
